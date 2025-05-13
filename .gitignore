@@ -1,0 +1,59 @@
+# Dependencies
+/node_modules
+/frontend/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+/frontend/coverage
+
+# Production
+/build
+/frontend/build
+/dist
+/frontend/dist
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+/frontend/.env
+/frontend/.env.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# IDE/Editor folders
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Uploaded files
+/backend/uploads/*
+!/backend/uploads/.gitkeep
+
+# Debug
+.debug
+
+# Misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
