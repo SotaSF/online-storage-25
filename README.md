@@ -1,5 +1,4 @@
-<<<<<<< HEAD
-# File Storage Application
+# Online Storage 25
 
 A full-stack web application for secure file storage with user authentication and management features.
 
@@ -106,7 +105,4 @@ The application will be available at:
 - JWT Authentication
 - Protected Routes
 - File Access Control
-- Storage Limits 
-=======
-# online-storage-25
->>>>>>> 1666dfda5fc0b6f2318bee79729279f4929d4a14
+- Storage Limits
