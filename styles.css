@@ -1,0 +1,43 @@
+body {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+}
+
+.btn-custom {
+  background-color: #001bfe;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  text-decoration: none;
+  border: none;
+}
+
+.btn-custom:hover {
+  background-color: #0056b3;
+}
+
+.hero {
+  background: #007bff;
+  color: #fff;
+  text-align: center;
+  padding: 100px 20px;
+}
+
+.feature-item {
+  padding: 20px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  margin-bottom: 20px;
+}
+
+.modal-content {
+  border-radius: 10px;
+}
+
+footer {
+  background: #333;
+  color: #fff;
+  text-align: center;
+  padding: 20px 0;
+  margin-top: 50px;
+}
