@@ -43,6 +43,8 @@ const registerUser = asyncHandler(async (req, res) => {
             _id: user.id,
             name: user.name,
             email: user.email,
+            storage: user.storage,
+            usedStorage: user.usedStorage,
             token: generateToken(user._id),
         });
     } else {
@@ -65,6 +67,8 @@ const loginUser = asyncHandler(async (req, res) => {
             _id: user.id,
             name: user.name,
             email: user.email,
+            storage: user.storage,
+            usedStorage: user.usedStorage,
             token: generateToken(user._id),
         });
     } else {
@@ -170,7 +174,14 @@ const resetPassword = asyncHandler(async (req, res) => {
 // @route   GET /api/users/me
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
-    res.status(200).json(req.user);
+    const user = await User.findById(req.user._id);
+    res.status(200).json({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        storage: user.storage,
+        usedStorage: user.usedStorage
+    });
 });
 
 module.exports = {

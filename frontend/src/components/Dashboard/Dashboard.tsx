@@ -19,6 +19,8 @@ import {
     Tooltip,
     Avatar,
     ListItemAvatar,
+    Breadcrumbs,
+    Link,
 } from '@mui/material';
 import {
     Delete,
@@ -33,8 +35,10 @@ import {
     VideoFile,
     Description,
     Code,
+    ArrowBack,
 } from '@mui/icons-material';
 import ReactDOM from 'react-dom';
+import FolderList from '../Folder/FolderList';
 
 interface File {
     _id: string;
@@ -44,13 +48,27 @@ interface File {
     mimetype?: string;
 }
 
+interface Folder {
+    _id: string;
+    name: string;
+    path: string;
+}
+
 interface StorageResponse {
     usedStorage: number;
     storage: number;
 }
 
+interface FolderContents {
+    folders: Folder[];
+    files: File[];
+}
+
 const Dashboard: React.FC = () => {
     const [files, setFiles] = useState<File[]>([]);
+    const [folders, setFolders] = useState<Folder[]>([]);
+    const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+    const [folderPath, setFolderPath] = useState<Array<{ id: string | null; name: string }>>([{ id: null, name: 'Root' }]);
     const [error, setError] = useState('');
     const [uploading, setUploading] = useState(false);
     const [storageUsed, setStorageUsed] = useState(0);
@@ -65,9 +83,9 @@ const Dashboard: React.FC = () => {
             return;
         }
 
-        fetchFiles();
+        fetchFolderContents(currentFolder);
         fetchStorageInfo();
-    }, [token, navigate]);
+    }, [token, navigate, currentFolder]);
 
     const config = {
         headers: {
@@ -75,15 +93,18 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const fetchFiles = async () => {
+    const fetchFolderContents = async (folderId: string | null) => {
         try {
-            const response = await axios.get('http://localhost:5000/api/files', config);
-            console.log('Files response:', response.data);
-            setFiles(response.data);
+            const response = await axios.get<FolderContents>(
+                `http://localhost:5000/api/folders/${folderId || 'root'}/contents`,
+                config
+            );
+            setFolders(response.data.folders);
+            setFiles(response.data.files);
             setError('');
         } catch (err: any) {
-            console.error('Error fetching files:', err);
-            setError(err.response?.data?.message || 'Error fetching files');
+            console.error('Error fetching folder contents:', err);
+            setError(err.response?.data?.message || 'Error fetching folder contents');
             if (err.response?.status === 401) {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
@@ -135,16 +156,21 @@ const Dashboard: React.FC = () => {
             return;
         }
 
-        // Check if file with same name already exists
+        // Check if file with same name already exists in current folder
         const fileExists = files.some(f => f.originalname === file.name);
         if (fileExists) {
-            setError(`A file with the name "${file.name}" already exists. Please rename the file or choose a different one.`);
+            setError(`A file with the name "${file.name}" already exists in this folder. Please rename the file or choose a different one.`);
             event.target.value = '';
             return;
         }
 
         const formData = new FormData();
         formData.append('file', file);
+        
+        // Explicitly set the folder ID in the form data
+        if (currentFolder) {
+            formData.append('folder', currentFolder);
+        }
 
         setUploading(true);
         setError('');
@@ -160,11 +186,17 @@ const Dashboard: React.FC = () => {
                     console.log(`Upload Progress: ${percentCompleted}%`);
                 },
             });
+
+            // Verify the file was uploaded to the correct folder
+            if (response.data.folder === currentFolder) {
+                setFiles(prevFiles => [...prevFiles, response.data]);
+            } else {
+                // If the file wasn't uploaded to the expected folder, refresh the current folder contents
+                await fetchFolderContents(currentFolder);
+            }
             
-            // Add the new file to the files list
-            setFiles(prevFiles => [...prevFiles, response.data]);
-            // Update storage used
-            setStorageUsed(prev => prev + file.size);
+            // Update storage info after successful upload
+            await fetchStorageInfo();
         } catch (err: any) {
             console.error('Upload error:', err);
             setError(err.response?.data?.message || 'Error uploading file. Please try again.');
@@ -172,6 +204,77 @@ const Dashboard: React.FC = () => {
             setUploading(false);
             event.target.value = '';
         }
+    };
+
+    const handleFolderClick = async (folderId: string) => {
+        try {
+            const folder = folders.find(f => f._id === folderId);
+            if (folder) {
+                setCurrentFolder(folderId);
+                setFolderPath(prev => [...prev, { id: folderId, name: folder.name }]);
+                // Clear current files and folders before fetching new ones
+                setFiles([]);
+                setFolders([]);
+                // Fetch the contents of the new folder
+                await fetchFolderContents(folderId);
+            }
+        } catch (err: any) {
+            console.error('Error navigating to folder:', err);
+            setError(err.response?.data?.message || 'Error navigating to folder');
+        }
+    };
+
+    const handleFolderCreate = async (name: string) => {
+        try {
+            const response = await axios.post(
+                'http://localhost:5000/api/folders',
+                {
+                    name,
+                    parent: currentFolder
+                },
+                config
+            );
+            setFolders(prev => [...prev, response.data]);
+        } catch (err: any) {
+            console.error('Error creating folder:', err);
+            setError(err.response?.data?.message || 'Error creating folder');
+        }
+    };
+
+    const handleFolderRename = async (folderId: string, newName: string) => {
+        try {
+            const response = await axios.put(
+                `http://localhost:5000/api/folders/${folderId}`,
+                { name: newName },
+                config
+            );
+            setFolders(prev => prev.map(folder => 
+                folder._id === folderId ? response.data : folder
+            ));
+        } catch (err: any) {
+            console.error('Error renaming folder:', err);
+            setError(err.response?.data?.message || 'Error renaming folder');
+        }
+    };
+
+    const handleFolderDelete = async (folderId: string) => {
+        try {
+            await axios.delete(`http://localhost:5000/api/folders/${folderId}`, config);
+            setFolders(prev => prev.filter(folder => folder._id !== folderId));
+        } catch (err: any) {
+            console.error('Error deleting folder:', err);
+            setError(err.response?.data?.message || 'Error deleting folder');
+        }
+    };
+
+    const navigateToFolder = async (folderId: string | null, index: number) => {
+        setCurrentFolder(folderId);
+        setFolderPath(prev => prev.slice(0, index + 1));
+        // Clear current files and folders before fetching new ones
+        setFiles([]);
+        setFolders([]);
+        // Fetch the contents of the selected folder
+        await fetchFolderContents(folderId);
     };
 
     const handleDownload = async (fileId: string, filename: string) => {
@@ -217,8 +320,9 @@ const Dashboard: React.FC = () => {
             
             // Update the files list by removing the deleted file
             setFiles(prevFiles => prevFiles.filter(file => file._id !== fileId));
-            // Update storage used
-            setStorageUsed(prev => Math.max(0, prev - fileToDelete.size));
+            
+            // Update storage info after successful deletion
+            await fetchStorageInfo();
         } catch (err: any) {
             console.error('Delete error:', err);
             setError(err.response?.data?.message || 'Error deleting file');
@@ -367,8 +471,25 @@ const Dashboard: React.FC = () => {
                 </Box>
             </Paper>
 
-            <Box sx={{ mt: 4, mb: 4 }}>
+            <Box sx={{ mt: 3 }}>
                 <Grid container spacing={3}>
+                    {/* Breadcrumb Navigation */}
+                    <Grid item xs={12}>
+                        <Breadcrumbs aria-label="folder navigation">
+                            {folderPath.map((folder, index) => (
+                                <Link
+                                    key={folder.id || 'root'}
+                                    component="button"
+                                    color={index === folderPath.length - 1 ? 'text.primary' : 'primary'}
+                                    onClick={() => navigateToFolder(folder.id, index)}
+                                    sx={{ textDecoration: 'none' }}
+                                >
+                                    {folder.name}
+                                </Link>
+                            ))}
+                        </Breadcrumbs>
+                    </Grid>
+
                     {/* Storage Usage Card */}
                     <Grid item xs={12} md={4}>
                         <Paper sx={{ 
@@ -427,7 +548,7 @@ const Dashboard: React.FC = () => {
                                     }
                                 }}
                             >
-                                {uploading ? 'Uploading...' : 'Click to Upload File'}
+                                {uploading ? 'Uploading...' : 'Upload File'}
                                 <input
                                     type="file"
                                     hidden
@@ -454,87 +575,101 @@ const Dashboard: React.FC = () => {
                         </Grid>
                     )}
 
-                    {/* Files List */}
+                    {/* Folders and Files List */}
                     <Grid item xs={12}>
                         <Paper sx={{ 
                             background: theme.palette.background.default,
                             border: `1px solid ${theme.palette.divider}`
                         }}>
-                            <List>
-                                {files.length === 0 ? (
-                                    <Box sx={{ 
-                                        p: 4, 
-                                        textAlign: 'center',
-                                        color: theme.palette.text.secondary 
-                                    }}>
-                                        <CloudUpload sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                                        <Typography variant="body1">
-                                            No files uploaded yet
-                                        </Typography>
-                                    </Box>
-                                ) : (
-                                    files.map((file, index) => (
-                                        <React.Fragment key={file._id}>
-                                            <ListItem
-                                                sx={{
-                                                    py: 2,
-                                                    '&:hover': {
-                                                        bgcolor: theme.palette.action.hover
+                            <FolderList
+                                folders={folders}
+                                onFolderClick={handleFolderClick}
+                                onFolderCreate={handleFolderCreate}
+                                onFolderRename={handleFolderRename}
+                                onFolderDelete={handleFolderDelete}
+                            />
+                            
+                            {folders.length === 0 && files.length === 0 && (
+                                <Box sx={{ 
+                                    p: 4, 
+                                    textAlign: 'center',
+                                    color: theme.palette.text.secondary 
+                                }}>
+                                    <CloudUpload sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+                                    <Typography variant="body1">
+                                        This folder is empty
+                                    </Typography>
+                                </Box>
+                            )}
+
+                            {/* Files */}
+                            {files.length > 0 && (
+                                <>
+                                    {folders.length > 0 && <Divider />}
+                                    <List>
+                                        {files.map((file, index) => (
+                                            <React.Fragment key={file._id}>
+                                                <ListItem
+                                                    sx={{
+                                                        py: 2,
+                                                        '&:hover': {
+                                                            bgcolor: theme.palette.action.hover
+                                                        }
+                                                    }}
+                                                    secondaryAction={
+                                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                                            <Tooltip title="Download">
+                                                                <IconButton
+                                                                    onClick={() => handleDownload(file._id, file.originalname)}
+                                                                    sx={{ 
+                                                                        color: theme.palette.primary.main,
+                                                                        '&:hover': {
+                                                                            bgcolor: theme.palette.primary.light + '20'
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Download />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                            <Tooltip title="Delete">
+                                                                <IconButton
+                                                                    onClick={() => handleDelete(file._id)}
+                                                                    sx={{ 
+                                                                        color: theme.palette.error.main,
+                                                                        '&:hover': {
+                                                                            bgcolor: theme.palette.error.light + '20'
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Delete />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        </Box>
                                                     }
-                                                }}
-                                                secondaryAction={
-                                                    <Box sx={{ display: 'flex', gap: 1 }}>
-                                                        <Tooltip title="Download">
-                                                            <IconButton
-                                                                onClick={() => handleDownload(file._id, file.originalname)}
-                                                                sx={{ 
-                                                                    color: theme.palette.primary.main,
-                                                                    '&:hover': {
-                                                                        bgcolor: theme.palette.primary.light + '20'
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <Download />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                        <Tooltip title="Delete">
-                                                            <IconButton
-                                                                onClick={() => handleDelete(file._id)}
-                                                                sx={{ 
-                                                                    color: theme.palette.error.main,
-                                                                    '&:hover': {
-                                                                        bgcolor: theme.palette.error.light + '20'
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <Delete />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    </Box>
-                                                }
-                                            >
-                                                <ListItemAvatar>
-                                                    {getFilePreview(file)}
-                                                </ListItemAvatar>
-                                                <ListItemText
-                                                    primary={
-                                                        <Typography variant="body1" component="div" sx={{ fontWeight: 500 }}>
-                                                            {file.originalname}
-                                                        </Typography>
-                                                    }
-                                                    secondary={
-                                                        <Typography variant="body2" color="text.secondary">
-                                                            {formatSize(file.size)} • Uploaded on{' '}
-                                                            {new Date(file.createdAt).toLocaleDateString()}
-                                                        </Typography>
-                                                    }
-                                                />
-                                            </ListItem>
-                                            {index < files.length - 1 && <Divider />}
-                                        </React.Fragment>
-                                    ))
-                                )}
-                            </List>
+                                                >
+                                                    <ListItemAvatar>
+                                                        {getFilePreview(file)}
+                                                    </ListItemAvatar>
+                                                    <ListItemText
+                                                        primary={
+                                                            <Typography variant="body1" component="div" sx={{ fontWeight: 500 }}>
+                                                                {file.originalname}
+                                                            </Typography>
+                                                        }
+                                                        secondary={
+                                                            <Typography variant="body2" color="text.secondary">
+                                                                {formatSize(file.size)} • Uploaded on{' '}
+                                                                {new Date(file.createdAt).toLocaleDateString()}
+                                                            </Typography>
+                                                        }
+                                                    />
+                                                </ListItem>
+                                                {index < files.length - 1 && <Divider />}
+                                            </React.Fragment>
+                                        ))}
+                                    </List>
+                                </>
+                            )}
                         </Paper>
                     </Grid>
                 </Grid>

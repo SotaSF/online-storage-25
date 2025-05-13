@@ -38,6 +38,7 @@ app.use('/uploads', express.static(uploadsDir));
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/files', require('./routes/fileRoutes'));
+app.use('/api/folders', require('./routes/folderRoutes'));
 
 // Error handler
 app.use((err, req, res, next) => {

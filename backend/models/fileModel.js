@@ -7,6 +7,11 @@ const fileSchema = mongoose.Schema(
             required: true,
             ref: 'User',
         },
+        folder: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Folder',
+            default: null,
+        },
         filename: {
             type: String,
             required: true,
@@ -32,5 +37,8 @@ const fileSchema = mongoose.Schema(
         timestamps: true,
     }
 );
+
+// Create index for unique file names under the same folder for each user
+fileSchema.index({ user: 1, folder: 1, originalname: 1 }, { unique: true });
 
 module.exports = mongoose.model('File', fileSchema); 

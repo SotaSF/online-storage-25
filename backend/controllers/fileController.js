@@ -3,6 +3,7 @@ const File = require('../models/fileModel');
 const User = require('../models/userModel');
 const fs = require('fs');
 const path = require('path');
+const Folder = require('../models/folderModel');
 
 // @desc    Upload a file
 // @route   POST /api/files
@@ -22,22 +23,43 @@ const uploadFile = asyncHandler(async (req, res) => {
         throw new Error('Not enough storage space');
     }
 
-    // Check for duplicate file
+    // Get the folder ID from the request body
+    const folderId = req.body.folder || null;
+
+    // If folder ID is provided, verify it exists and belongs to the user
+    if (folderId) {
+        const folder = await Folder.findById(folderId);
+        if (!folder) {
+            // Delete the uploaded file
+            fs.unlinkSync(req.file.path);
+            res.status(404);
+            throw new Error('Folder not found');
+        }
+        if (folder.user.toString() !== req.user._id.toString()) {
+            // Delete the uploaded file
+            fs.unlinkSync(req.file.path);
+            res.status(401);
+            throw new Error('Not authorized');
+        }
+    }
+
+    // Check for duplicate file in the same folder
     const existingFile = await File.findOne({
         user: req.user._id,
-        originalname: req.file.originalname,
-        size: req.file.size
+        folder: folderId,
+        originalname: req.file.originalname
     });
 
     if (existingFile) {
         // Delete the newly uploaded file
         fs.unlinkSync(req.file.path);
         res.status(400);
-        throw new Error('A file with the same name and size already exists');
+        throw new Error('A file with the same name already exists in this folder');
     }
 
     const file = await File.create({
         user: req.user._id,
+        folder: folderId,
         filename: req.file.filename,
         originalname: req.file.originalname,
         mimetype: req.file.mimetype,
@@ -55,7 +77,8 @@ const uploadFile = asyncHandler(async (req, res) => {
         originalname: file.originalname,
         mimetype: file.mimetype,
         size: file.size,
-        createdAt: file.createdAt
+        createdAt: file.createdAt,
+        folder: file.folder
     });
 });
 
